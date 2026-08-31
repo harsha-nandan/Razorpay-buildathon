@@ -1,0 +1,10 @@
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+sqlalchemy>=2.0.0
+pydantic>=2.4.0
+pydantic-settings>=2.4.0
+python-dotenv>=1.0.0
+strands-agents[anthropic,openai,ollama]>=1.53.0
+razorpay>=1.4.2
+bcrypt>=4.1.0
+pyjwt>=2.9.0
