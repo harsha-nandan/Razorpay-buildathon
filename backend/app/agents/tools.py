@@ -12,17 +12,19 @@ from sqlalchemy.orm import Session
 from strands import tool
 
 from .. import audit, mandates as mandate_math
+from ..campaign_pricing import apply_discount, get_active_discount_percent
 from ..gatekeeper.gatekeeper import evaluate as gatekeeper_evaluate
 from ..gatekeeper.policy import ProposedAction
 from ..models import Mandate, Order, Product
+from ..order_lifecycle import expire_abandoned_orders
 from ..payment_methods import compute_offer, describe as describe_payment_methods
 from ..razorpay_adapter.factory import get_gateway
 from . import cart as cart_ops
 from .search import search_products
 
 
-def _product_to_dict(p: Product) -> dict[str, Any]:
-    return {
+def _product_to_dict(p: Product, discount_percent: int = 0) -> dict[str, Any]:
+    out = {
         "sku": p.sku,
         "title": p.title,
         "description": p.description,
@@ -31,7 +33,16 @@ def _product_to_dict(p: Product) -> dict[str, Any]:
         "price_inr": round(p.price_paise / 100, 2),
         "in_stock": p.in_stock,
         "tags": p.tags,
+        "rating": p.rating,
+        "review_count": p.review_count,
+        "image_url": p.image_url,
     }
+    if discount_percent > 0:
+        discounted_paise = apply_discount(p.price_paise, discount_percent)
+        out["discount_percent"] = discount_percent
+        out["discounted_price_paise"] = discounted_paise
+        out["discounted_price_inr"] = round(discounted_paise / 100, 2)
+    return out
 
 
 def build_checkout_tools(
@@ -39,6 +50,7 @@ def build_checkout_tools(
     session_id: str,
     correlation_id: str,
     actor: str = "checkout_agent",
+    customer_id: str = "",
     customer_name: str = "",
     customer_email: str = "",
     customer_contact: str = "",
@@ -50,10 +62,14 @@ def build_checkout_tools(
     shopper via the checkout_agent, or an external ai_buyer driving the same
     machinery end to end. customer_* is the authenticated shopper's known
     contact info (empty for the anonymous ai_buyer persona) - the agent
-    never has to ask for it, it's applied automatically at checkout. mandate,
-    when given, is a customer-issued spending authorization the agent is
-    bounded by in addition to the merchant's own policy - the agent is never
-    told the mandate exists as a tool it can call, it's a silent ceiling.
+    never has to ask for it, it's applied automatically at checkout.
+    customer_id additionally looks up any personalized campaign discount
+    this shopper was targeted for, so a launched campaign's price actually
+    shows up in search results/cart/checkout instead of only ever reaching
+    the customer as an out-of-band payment link. mandate, when given, is a
+    customer-issued spending authorization the agent is bounded by in
+    addition to the merchant's own policy - the agent is never told the
+    mandate exists as a tool it can call, it's a silent ceiling.
     """
 
     @tool
@@ -62,6 +78,14 @@ def build_checkout_tools(
         The query is matched against product title, description, category, and tags (with
         plural/singular tolerance), ranked by how many terms hit - not just an exact substring
         match. All filters are optional and combine with AND.
+
+        Each result carries `rating` (0-5) and `review_count`. When two or more results are
+        otherwise equally good matches - especially at the same price - prefer the one with the
+        higher rating and more reviews over just picking the first result, and say so explicitly
+        (e.g. "I picked X over Y because it's rated 4.8 from 1,200 reviews vs 3.9 from 80").
+        Don't let a higher rating override a real feature requirement the shopper stated (e.g. if
+        they specifically asked for ANC, discard on that first) - it's a tiebreaker among
+        otherwise-suitable options, not an override.
 
         Args:
             query: Free-text search, e.g. "wireless earbuds" or "something for a home workout".
@@ -74,7 +98,7 @@ def build_checkout_tools(
             category=category,
             max_price_paise=int(max_price_inr * 100) if max_price_inr else 0,
         )
-        return [_product_to_dict(p) for p in results]
+        return [_product_to_dict(p, get_active_discount_percent(db, customer_id, p.sku)) for p in results]
 
     @tool
     def add_to_cart(sku: str, quantity: int = 1) -> dict:
@@ -87,20 +111,28 @@ def build_checkout_tools(
         product = db.query(Product).filter(Product.sku == sku).first()
         if not product:
             return {"error": f"No product with SKU '{sku}'."}
+        discount_percent = get_active_discount_percent(db, customer_id, sku)
+        unit_price_paise = apply_discount(product.price_paise, discount_percent) if discount_percent else product.price_paise
         items = cart_ops.get_cart(db, session_id)
         for item in items:
             if item["sku"] == sku:
                 item["quantity"] += quantity
+                item["price_paise"] = unit_price_paise
+                if discount_percent:
+                    item["original_price_paise"] = product.price_paise
+                    item["discount_percent"] = discount_percent
                 break
         else:
-            items.append(
-                {
-                    "sku": product.sku,
-                    "title": product.title,
-                    "price_paise": product.price_paise,
-                    "quantity": quantity,
-                }
-            )
+            item = {
+                "sku": product.sku,
+                "title": product.title,
+                "price_paise": unit_price_paise,
+                "quantity": quantity,
+            }
+            if discount_percent:
+                item["original_price_paise"] = product.price_paise
+                item["discount_percent"] = discount_percent
+            items.append(item)
         cart_ops.save_cart(db, session_id, items)
         return {"cart": items, "subtotal_paise": cart_ops.cart_total_paise(items)}
 
@@ -140,7 +172,7 @@ def build_checkout_tools(
             if suggested_skus
             else []
         )
-        return [_product_to_dict(p) for p in suggestions]
+        return [_product_to_dict(p, get_active_discount_percent(db, customer_id, p.sku)) for p in suggestions]
 
     @tool
     def check_payment_method(network: str = "") -> list[dict]:
@@ -199,7 +231,14 @@ def build_checkout_tools(
 
         subtotal_paise = cart_ops.cart_total_paise(items)
         amount_paise = round(subtotal_paise * (1 - discount_percent / 100))
-        orders_this_session = db.query(Order).filter(Order.session_id == session_id).count()
+
+        # Abandoned payment links (never confirmed paid/failed) shouldn't
+        # block new attempts forever - auto-cancel any that are stale before
+        # counting toward the session cap.
+        expire_abandoned_orders(db, session_id)
+        orders_this_session = (
+            db.query(Order).filter(Order.session_id == session_id, Order.status != "cancelled").count()
+        )
 
         context: dict[str, Any] = {
             "orders_this_session": orders_this_session,

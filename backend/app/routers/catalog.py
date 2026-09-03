@@ -25,6 +25,8 @@ def _product_payload(p: Product) -> dict:
         "image_url": p.image_url,
         "tags": p.tags,
         "complements": p.complements,
+        "rating": p.rating,
+        "review_count": p.review_count,
     }
 
 

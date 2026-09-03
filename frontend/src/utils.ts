@@ -32,6 +32,11 @@ export interface SuggestedProduct {
   price_paise: number;
   category: string;
   in_stock: boolean;
+  discount_percent?: number;
+  discounted_price_paise?: number;
+  rating?: number;
+  review_count?: number;
+  image_url?: string;
 }
 
 const PRODUCT_LIST_TOOLS = new Set(["search_catalog", "get_upsell_suggestions"]);

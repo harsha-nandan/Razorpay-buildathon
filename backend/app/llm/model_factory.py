@@ -15,12 +15,30 @@ from functools import lru_cache
 
 from strands.models.model import Model
 
-from ..config import get_settings
+from ..config import Settings, get_settings
 
 
 class LLMNotConfiguredError(RuntimeError):
     """Raised when the selected provider has no API key set yet, or (for
     ollama) isn't reachable."""
+
+
+def _build_anthropic_model(settings: Settings) -> Model:
+    from strands.models.anthropic import AnthropicModel
+
+    client_args: dict = {"api_key": settings.anthropic_api_key}
+    if settings.anthropic_workspace_id:
+        # Required for an identity-linked API key (tied to a person across
+        # an org with multiple workspaces) - Anthropic rejects requests from
+        # one of these with 400 "anthropic-workspace-id is required" unless
+        # every request carries this header.
+        client_args["default_headers"] = {"anthropic-workspace-id": settings.anthropic_workspace_id}
+
+    return AnthropicModel(
+        client_args=client_args,
+        model_id=settings.anthropic_model_id,
+        max_tokens=2048,
+    )
 
 
 @lru_cache
@@ -47,10 +65,25 @@ def get_model() -> Model:
 
         # Groq's API is OpenAI-compatible, so the OpenAI provider works
         # unmodified against Groq's endpoint - no separate client needed.
-        return OpenAIModel(
+        groq_model = OpenAIModel(
             client_args={"api_key": settings.groq_api_key, "base_url": settings.groq_base_url},
             model_id=settings.groq_model_id,
         )
+
+        # Groq's free tier shares one daily token cap across everything this
+        # app does - it runs out. Rather than the whole app going dark until
+        # someone notices and flips LLM_PROVIDER by hand, fail over to
+        # Anthropic automatically on a rate limit, if a key is available.
+        if settings.anthropic_api_key:
+            from .fallback_model import FallbackModel
+
+            return FallbackModel(
+                groq_model,
+                _build_anthropic_model(settings),
+                primary_name="groq",
+                fallback_name="anthropic",
+            )
+        return groq_model
 
     if provider == "gemini":
         if not settings.gemini_api_key:
@@ -82,13 +115,7 @@ def get_model() -> Model:
             raise LLMNotConfiguredError(
                 "LLM_PROVIDER=anthropic but ANTHROPIC_API_KEY is not set. Add it to backend/.env."
             )
-        from strands.models.anthropic import AnthropicModel
-
-        return AnthropicModel(
-            client_args={"api_key": settings.anthropic_api_key},
-            model_id=settings.anthropic_model_id,
-            max_tokens=2048,
-        )
+        return _build_anthropic_model(settings)
 
     raise ValueError(
         f"Unknown LLM_PROVIDER '{settings.llm_provider}'. Use 'anthropic', 'openai', 'ollama', 'groq', or 'gemini'."

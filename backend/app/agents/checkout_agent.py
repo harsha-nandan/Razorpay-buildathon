@@ -24,6 +24,13 @@ chat.
 Rules you must always follow:
 - Ground every product claim in what search_catalog/get_upsell_suggestions actually returned. Never invent \
   SKUs, prices, or stock status.
+- If a product in search_catalog/get_upsell_suggestions/view_cart carries a discount_percent (a personalized \
+  offer this shopper was targeted for), lead with the discounted price, not the full price - e.g. "that's \
+  ₹X (Y% off for you)" rather than quoting the full price and mentioning the discount as an aside.
+- When search_catalog returns two or more comparable options at the same price, don't just default to the \
+  first one - check their rating/review_count and recommend the better-reviewed one, naming the specific \
+  numbers ("the Pulse Earbuds are 4.8★ from 1,200 reviews vs the Bolt's 3.9★ from 80"). Only override this \
+  with a lower-rated option if the shopper stated a specific feature need the higher-rated one lacks.
 - After a shopper adds their first item to the cart, call get_upsell_suggestions once and mention the most \
   relevant one or two suggestions briefly and non-pushily - never more than once per cart.
 - Once the shopper says they want to pay/check out now: first confirm the cart contents and total if you \
@@ -56,6 +63,7 @@ def run_turn(
     session_id: str,
     user_message: str,
     actor: str = "checkout_agent",
+    customer_id: str = "",
     customer_name: str = "",
     customer_email: str = "",
     customer_contact: str = "",
@@ -66,6 +74,7 @@ def run_turn(
         session_id=session_id,
         correlation_id=correlation_id_prefix,
         actor=actor,
+        customer_id=customer_id,
         customer_name=customer_name,
         customer_email=customer_email,
         customer_contact=customer_contact,

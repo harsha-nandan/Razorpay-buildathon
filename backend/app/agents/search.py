@@ -58,11 +58,14 @@ def search_products(
     query_tokens = _tokenize(query)
 
     if not query_tokens:
-        results = sorted(candidates, key=lambda p: p.price_paise)
+        results = sorted(candidates, key=lambda p: (p.price_paise, -p.rating))
     else:
         scored = [(p, _relevance_score(query_tokens, p)) for p in candidates]
         scored = [(p, s) for p, s in scored if s > 0]
-        scored.sort(key=lambda pair: (-pair[1], pair[0].price_paise))
+        # Same relevance and price is a real tie (e.g. three earbuds at the
+        # same price point) - break it by rating so a shopper/agent sees the
+        # better-reviewed option first instead of an arbitrary insertion order.
+        scored.sort(key=lambda pair: (-pair[1], pair[0].price_paise, -pair[0].rating))
         results = [p for p, _ in scored]
 
     if len(results) < MIN_RESULTS:
@@ -79,9 +82,9 @@ def _backfill(db: Session, query_tokens: set[str], already: list[Product], targe
     pool = [p for p in db.query(Product).filter(Product.in_stock.is_(True)).all() if p.sku not in have_skus]
 
     if query_tokens:
-        pool.sort(key=lambda p: (-_relevance_score(query_tokens, p), p.price_paise))
+        pool.sort(key=lambda p: (-_relevance_score(query_tokens, p), p.price_paise, -p.rating))
     else:
-        pool.sort(key=lambda p: p.price_paise)
+        pool.sort(key=lambda p: (p.price_paise, -p.rating))
 
     results = list(already)
     for p in pool:

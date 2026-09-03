@@ -42,7 +42,7 @@ class CampaignRequest(BaseModel):
     name: str
     goal: str
     discount_percent: int
-    target_segment: str = "general"
+    target_segment: str = "repeat"
     product_sku: str
     max_recipients: int = 10
 

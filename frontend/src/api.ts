@@ -1,10 +1,21 @@
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
-async function request<T>(path: string, options?: RequestInit, token?: string | null): Promise<T> {
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+async function request<T>(
+  path: string,
+  options?: RequestInit,
+  token?: string | null,
+  // Status codes that carry a real, well-formed body and should be parsed
+  // and returned instead of thrown - e.g. /ai-buyer/purchase's 402, which
+  // is the x402-style "quote" response, not an error.
+  acceptStatuses: number[] = []
+): Promise<T> {
+  // Merge onto options.headers (not the other way around) - a later spread of
+  // `options` would otherwise silently drop the Content-Type/Authorization
+  // defaults whenever a caller passes its own headers (e.g. X-PAYMENT).
+  const headers: Record<string, string> = { "Content-Type": "application/json", ...(options?.headers as Record<string, string> | undefined) };
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`${API_BASE}${path}`, { headers, ...options });
-  if (!res.ok) {
+  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  if (!res.ok && !acceptStatuses.includes(res.status)) {
     const body = await res.json().catch(() => null);
     throw new Error(body?.detail || `${res.status} ${res.statusText}`);
   }
@@ -22,6 +33,21 @@ export interface Product {
   in_stock?: boolean;
   availability?: string;
   tags: string[];
+  rating?: number;
+  review_count?: number;
+  image_url?: string;
+}
+
+export interface AIBuyerRun {
+  order_id: string;
+  session_id: string;
+  buyer_intent: string;
+  requested_budget_paise: number | null;
+  status: string;
+  amount_paise: number;
+  items: { sku: string; title: string; price_paise: number; quantity: number }[];
+  payment_link_url: string;
+  created_at: string;
 }
 
 export interface TraceItem {
@@ -34,17 +60,35 @@ export interface TraceItem {
   status?: string;
 }
 
+export interface CartItem {
+  sku: string;
+  title: string;
+  price_paise: number;
+  quantity: number;
+  original_price_paise?: number;
+  discount_percent?: number;
+}
+
 export interface ChatResponse {
   session_id: string;
   reply: string;
   trace: TraceItem[];
-  cart: { sku: string; title: string; price_paise: number; quantity: number }[];
+  cart: CartItem[];
 }
 
 export interface AIBuyerResponse {
   session_id: string;
   reply: string;
   trace: TraceItem[];
+}
+
+export interface AIBuyerConfirmation {
+  status: string;
+  order_id: string;
+  amount_paise: number;
+  invoice_number: string | null;
+  simulated: boolean;
+  real_gateway_status: string | null;
 }
 
 export interface AuditEntry {
@@ -146,7 +190,12 @@ export const api = {
   // Customer-authenticated
   sendChatMessage: (token: string, message: string) =>
     request<ChatResponse>("/chat/message", { method: "POST", body: JSON.stringify({ message }) }, token),
-  resetChat: (token: string) => request("/chat/reset", { method: "POST" }, token),
+  resetChat: (token: string) =>
+    request<{ status: string; session_id: string; cancelled_orders: number }>(
+      "/chat/reset",
+      { method: "POST" },
+      token
+    ),
   myOrders: (token: string) => request<Order[]>("/my/orders", undefined, token),
   simulatePayment: (token: string, order_id: string, outcome: "paid" | "failed", failure_code?: string) =>
     request<Order>(
@@ -161,8 +210,26 @@ export const api = {
     request<{ cart: Order["items"]; subtotal_paise: number }>(`/cart/${sku}`, { method: "DELETE" }, token),
 
   // Public - the agent-facing surface, no login required
+  // 402 here is a real, well-formed x402 "payment required" quote (the
+  // approved-checkout case), not an error - accept it alongside 200 so its
+  // body (reply/trace) is actually returned instead of thrown away.
   aiBuyerPurchase: (intent: string, budget_paise: number | null) =>
-    request<AIBuyerResponse>("/ai-buyer/purchase", { method: "POST", body: JSON.stringify({ intent, budget_paise }) }),
+    request<AIBuyerResponse>(
+      "/ai-buyer/purchase",
+      { method: "POST", body: JSON.stringify({ intent, budget_paise }) },
+      undefined,
+      [402]
+    ),
+  // Phase 2 of the x402-style handshake: presents the order id from phase 1
+  // as proof of payment via X-PAYMENT, completing the purchase and issuing
+  // the invoice - same unauthenticated agent-facing surface as phase 1.
+  aiBuyerConfirmPayment: (intent: string, orderId: string) =>
+    request<AIBuyerConfirmation>("/ai-buyer/purchase", {
+      method: "POST",
+      headers: { "X-PAYMENT": orderId },
+      body: JSON.stringify({ intent }),
+    }),
+  aiBuyerHistory: () => request<AIBuyerRun[]>("/ai-buyer/history"),
 
   // Seller-authenticated
   listAudit: (token: string, params?: { actor?: string; decision?: string }) => {
@@ -185,6 +252,10 @@ export const api = {
       max_recipients: number;
     }
   ) => request<Campaign>("/campaigns", { method: "POST", body: JSON.stringify(body) }, token),
+  cancelCampaign: (token: string, id: string) =>
+    request<Campaign>(`/campaigns/${id}/cancel`, { method: "POST" }, token),
+  deleteCampaign: (token: string, id: string) =>
+    request<{ status: string; id: string }>(`/campaigns/${id}`, { method: "DELETE" }, token),
   listOrders: (token: string) => request<Order[]>("/orders", undefined, token),
   listInvoices: (token: string) => request<Invoice[]>("/invoices", undefined, token),
   dashboardStats: (token: string) => request<DashboardStats>("/stats/dashboard", undefined, token),

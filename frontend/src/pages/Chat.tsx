@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { api, FAILURE_SCENARIOS, formatInr, type Invoice, type TraceItem } from "../api";
+import { api, FAILURE_SCENARIOS, formatInr, type CartItem, type Invoice, type TraceItem } from "../api";
 import TraceView from "../components/TraceView";
 import ProductCard from "../components/ProductCard";
+import ProductThumb from "../components/ProductThumb";
 import InvoiceView from "../components/InvoiceView";
 import TypingIndicator from "../components/TypingIndicator";
 import PaymentMethodPanel from "../components/PaymentMethodPanel";
@@ -14,6 +15,7 @@ import {
   type SuggestedProduct,
 } from "../utils";
 import { useAuth } from "../auth";
+import { useCatalogImages } from "../hooks/useCatalogImages";
 
 interface ChatLine {
   role: "user" | "assistant";
@@ -32,9 +34,10 @@ const STARTER_PROMPTS = [
 
 export default function Chat() {
   const { customer, customerToken } = useAuth();
+  const catalogImages = useCatalogImages();
   const [lines, setLines] = useState<ChatLine[]>([]);
   const [input, setInput] = useState("");
-  const [cart, setCart] = useState<{ sku: string; title: string; price_paise: number; quantity: number }[]>([]);
+  const [cart, setCart] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [paying, setPaying] = useState(false);
   const [showTrace, setShowTrace] = useState(false);
@@ -43,6 +46,7 @@ export default function Chat() {
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [failureCode, setFailureCode] = useState(FAILURE_SCENARIOS[0].code);
   const [removingSku, setRemovingSku] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   const started = lines.length > 0;
@@ -54,6 +58,28 @@ export default function Chat() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [lines, loading]);
+
+  async function cancelAndStartOver() {
+    setResetting(true);
+    try {
+      const res = await api.resetChat(customerToken!);
+      setLines([]);
+      setInvoice(null);
+      setPaymentOutcome({});
+      setShowCart(false);
+      setShowTrace(false);
+      if (res.cancelled_orders > 0) {
+        setLines([
+          {
+            role: "assistant",
+            text: `Cancelled ${res.cancelled_orders} unfinished payment attempt${res.cancelled_orders > 1 ? "s" : ""} from before. What are you shopping for today?`,
+          },
+        ]);
+      }
+    } finally {
+      setResetting(false);
+    }
+  }
 
   async function removeItem(sku: string) {
     setRemovingSku(sku);
@@ -162,6 +188,9 @@ export default function Chat() {
           <strong>Pulse &amp; Co. shopping assistant</strong>
         </div>
         <div style={{ display: "flex", gap: 8, position: "relative" }}>
+          <button className="btn" type="button" disabled={resetting} onClick={cancelAndStartOver}>
+            {resetting ? "Starting over…" : "Cancel & start over"}
+          </button>
           <button className="btn" type="button" onClick={() => setShowTrace((v) => !v)}>
             Agent reasoning
           </button>
@@ -177,10 +206,17 @@ export default function Chat() {
                 <>
                   {cart.map((item) => (
                     <div key={item.sku} className="cart-item">
-                      <span>
+                      <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <ProductThumb src={catalogImages[item.sku]} alt={item.title} size={28} />
                         {item.title} &times; {item.quantity}
+                        {item.discount_percent ? ` (${item.discount_percent}% off)` : ""}
                       </span>
                       <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        {item.original_price_paise ? (
+                          <span style={{ textDecoration: "line-through", opacity: 0.55, fontSize: 12 }}>
+                            {formatInr(item.original_price_paise * item.quantity)}
+                          </span>
+                        ) : null}
                         <strong>{formatInr(item.price_paise * item.quantity)}</strong>
                         <button
                           className="cart-remove-btn"

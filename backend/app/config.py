@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     llm_provider: str = "ollama"  # "anthropic" | "openai" | "ollama" | "groq" | "gemini"
     anthropic_api_key: str | None = None
     anthropic_model_id: str = "claude-sonnet-5"
+    # Only needed for an "identity-linked" API key (tied to a person across
+    # an org with multiple workspaces) - Anthropic then requires this header
+    # on every request. A plain project-scoped key doesn't need it.
+    anthropic_workspace_id: str | None = None
     openai_api_key: str | None = None
     openai_model_id: str = "gpt-4o-mini"
     # Groq: free tier, no card required, and dramatically faster than local
@@ -17,7 +21,7 @@ class Settings(BaseSettings):
     # OpenAI-API-compatible, so it reuses the OpenAI provider with a
     # different base_url instead of needing its own client.
     groq_api_key: str | None = None
-    groq_model_id: str = "llama-3.3-70b-versatile"
+    groq_model_id: str = "openai/gpt-oss-120b"
     groq_base_url: str = "https://api.groq.com/openai/v1"
     # Gemini: also has a genuinely free tier (Google AI Studio, no card
     # required) and is natively supported by Strands.
@@ -52,6 +56,11 @@ class Settings(BaseSettings):
     daily_campaign_budget_paise: int = 20_00_000  # INR 20,000
     max_campaign_recipients: int = 25
     max_orders_per_session: int = 5
+    # A "created" order (payment link issued, never confirmed paid/failed) is
+    # treated as abandoned past this many minutes and auto-cancelled so it
+    # stops consuming max_orders_per_session - covers a refreshed browser or
+    # an exited chat that never explicitly cancels the attempt.
+    abandoned_order_ttl_minutes: int = 30
 
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 

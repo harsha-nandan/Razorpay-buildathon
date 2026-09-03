@@ -2,6 +2,8 @@ import { Fragment, useEffect, useState } from "react";
 import { api, formatInr, type Invoice, type Order } from "../api";
 import { useAuth } from "../auth";
 import InvoiceView from "../components/InvoiceView";
+import ProductThumb from "../components/ProductThumb";
+import { useCatalogImages } from "../hooks/useCatalogImages";
 
 function statusBadge(status: string) {
   if (status === "paid") return <span className="badge badge-good">paid</span>;
@@ -11,6 +13,7 @@ function statusBadge(status: string) {
 
 export default function Orders() {
   const { sellerToken } = useAuth();
+  const catalogImages = useCatalogImages();
   const [orders, setOrders] = useState<Order[]>([]);
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -65,7 +68,16 @@ export default function Orders() {
                     >
                       <td>{new Date(o.created_at).toLocaleString()}</td>
                       <td className="primary">{o.source}</td>
-                      <td>{o.items.map((i) => i.title).join(", ")}</td>
+                      <td>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                          {o.items.map((i) => (
+                            <div key={i.sku} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                              <ProductThumb src={catalogImages[i.sku]} alt={i.title} size={24} />
+                              <span>{i.title}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </td>
                       <td>{formatInr(o.amount_paise)}</td>
                       <td>{statusBadge(o.status)}</td>
                       <td>

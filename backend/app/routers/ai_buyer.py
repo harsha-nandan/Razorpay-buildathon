@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, Query
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from ..agents import ai_buyer
 from ..config import get_settings
 from ..db import get_db
-from ..models import Mandate
+from ..models import Mandate, Order
 from ..schemas import AIBuyerRequest
 
 router = APIRouter(prefix="/ai-buyer", tags=["ai-buyer"])
@@ -77,3 +77,36 @@ def purchase(
     if result["status"] == "payment_required":
         return JSONResponse(status_code=402, content=_x402_quote(result))
     return result
+
+
+@router.get("/history")
+def history(limit: int = Query(50, le=200), db: Session = Depends(get_db)):
+    """Past AI-buyer runs that reached a checkout decision (approved or
+    denied) - the simulator page's own record of what it's done, since
+    these orders are intentionally never attached to a customer account
+    (see agents/ai_buyer.py). Keyed off the existing aibuyer-* session
+    pattern and Order rows rather than a separate identity/history table.
+    A run that never got as far as checkout (no match, or the agent stalled)
+    has no Order row and so has nothing to show here - it was already fully
+    reported in that request's own response."""
+    orders = (
+        db.query(Order)
+        .filter(Order.source == "ai_buyer")
+        .order_by(Order.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "order_id": o.id,
+            "session_id": o.session_id,
+            "buyer_intent": o.buyer_intent,
+            "requested_budget_paise": o.requested_budget_paise,
+            "status": o.status,
+            "amount_paise": o.amount_paise,
+            "items": o.items,
+            "payment_link_url": o.razorpay_payment_link_url,
+            "created_at": o.created_at,
+        }
+        for o in orders
+    ]

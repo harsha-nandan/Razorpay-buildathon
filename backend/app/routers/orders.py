@@ -5,6 +5,7 @@ from .. import audit, auth
 from ..config import get_settings
 from ..db import get_db
 from ..models import Customer, Order, Seller
+from ..order_lifecycle import cancel_order
 from ..payment_confirmation import confirm_paid
 from ..payment_failures import get_failure_detail
 from ..razorpay_adapter.factory import get_gateway
@@ -46,6 +47,28 @@ def list_my_orders(db: Session = Depends(get_db), customer: Customer = Depends(a
     session_id = f"cust-{customer.id}"
     orders = db.query(Order).filter(Order.session_id == session_id).order_by(Order.created_at.desc()).all()
     return [_order_out(o) for o in orders]
+
+
+@router.post("/orders/{order_id}/cancel")
+def cancel_my_order(
+    order_id: str, db: Session = Depends(get_db), customer: Customer = Depends(auth.get_current_customer)
+):
+    """Explicitly give up on an abandoned checkout (browser refreshed, chat
+    exited mid-payment, changed their mind) - frees the order's slot against
+    max_orders_per_session immediately instead of waiting for it to auto-
+    expire. Only the order's own customer can cancel it, and only while it's
+    still "created" (an unconfirmed payment link) - a paid/failed/denied
+    order is a closed transaction record and can't be cancelled."""
+    order = db.get(Order, order_id)
+    if not order:
+        raise HTTPException(404, "order not found")
+    if order.session_id != f"cust-{customer.id}":
+        raise HTTPException(403, "This order does not belong to you.")
+    if order.status != "created":
+        raise HTTPException(400, f"Order is already '{order.status}' - nothing to cancel.")
+
+    cancel_order(db, order, reason="cancelled by shopper")
+    return _order_out(order)
 
 
 @router.post("/payments/simulate")

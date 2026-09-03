@@ -8,6 +8,7 @@ const SEGMENTS = ["vip", "repeat", "new", "lapsed", "general"];
 function statusBadge(status: string) {
   if (status === "completed" || status === "running") return <span className="badge badge-good">{status}</span>;
   if (status === "denied") return <span className="badge badge-critical">denied</span>;
+  if (status === "cancelled") return <span className="badge badge-muted">cancelled</span>;
   return <span className="badge badge-muted">{status}</span>;
 }
 
@@ -18,6 +19,8 @@ export default function Campaigns() {
   const [expanded, setExpanded] = useState<Campaign | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     name: "",
@@ -61,6 +64,35 @@ export default function Campaigns() {
     if (!sellerToken) return;
     const full = await api.getCampaign(sellerToken, id);
     setExpanded(full);
+  }
+
+  async function stopCampaign(id: string) {
+    if (!sellerToken) return;
+    setCancelling(true);
+    try {
+      const updated = await api.cancelCampaign(sellerToken, id);
+      setExpanded(updated);
+      refresh();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+  async function deleteCampaign(id: string, name: string) {
+    if (!sellerToken) return;
+    if (!window.confirm(`Permanently delete campaign "${name}"? This can't be undone.`)) return;
+    setDeleting(id);
+    try {
+      await api.deleteCampaign(sellerToken, id);
+      if (expanded?.id === id) setExpanded(null);
+      refresh();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setDeleting(null);
+    }
   }
 
   return (
@@ -148,6 +180,7 @@ export default function Campaigns() {
                   <th>Discount</th>
                   <th>Reach</th>
                   <th>Status</th>
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -157,6 +190,20 @@ export default function Campaigns() {
                     <td>{c.discount_percent}%</td>
                     <td>{c.recipients_reached}/{c.max_recipients}</td>
                     <td>{statusBadge(c.status)}</td>
+                    <td>
+                      <button
+                        className="cart-remove-btn"
+                        type="button"
+                        aria-label={`Delete ${c.name}`}
+                        disabled={deleting === c.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteCampaign(c.id, c.name);
+                        }}
+                      >
+                        ×
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -179,6 +226,26 @@ export default function Campaigns() {
           <p style={{ fontSize: 12.5, color: "var(--text-muted)" }}>
             Discount exposure: {formatInr(expanded.budget_paise)} across up to {expanded.max_recipients} recipients
           </p>
+          <div style={{ display: "flex", gap: 8, marginTop: 4 }}>
+            {expanded.status === "completed" && (
+              <button className="btn" disabled={cancelling} onClick={() => stopCampaign(expanded.id)}>
+                {cancelling ? "Stopping…" : "Stop campaign"}
+              </button>
+            )}
+            <button
+              className="btn"
+              disabled={deleting === expanded.id}
+              onClick={() => deleteCampaign(expanded.id, expanded.name)}
+              style={{ color: "var(--status-critical)" }}
+            >
+              {deleting === expanded.id ? "Deleting…" : "Delete campaign"}
+            </button>
+          </div>
+          {expanded.status === "cancelled" && (
+            <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 6 }}>
+              Stopped - this discount no longer applies to any new checkout.
+            </p>
+          )}
           {expanded.actions && expanded.actions.length > 0 && (
             <table style={{ marginTop: 10 }}>
               <thead>

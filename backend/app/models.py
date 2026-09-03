@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -29,6 +29,8 @@ class Product(Base):
     in_stock: Mapped[bool] = mapped_column(default=True)
     tags: Mapped[list] = mapped_column(JSON, default=list)
     complements: Mapped[list] = mapped_column(JSON, default=list)  # SKUs suggested as cross-sell
+    rating: Mapped[float] = mapped_column(Float, default=0.0)  # 0-5 stars
+    review_count: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class Customer(Base):
@@ -91,7 +93,7 @@ class Order(Base):
     razorpay_payment_link_url: Mapped[str] = mapped_column(String, default="")
     amount_paise: Mapped[int] = mapped_column(Integer)
     currency: Mapped[str] = mapped_column(String, default="INR")
-    status: Mapped[str] = mapped_column(String, default="created")  # created|paid|failed|denied
+    status: Mapped[str] = mapped_column(String, default="created")  # created|paid|failed|denied|cancelled
     items: Mapped[list] = mapped_column(JSON, default=list)
     upsell_accepted: Mapped[list] = mapped_column(JSON, default=list)
     failure_code: Mapped[str] = mapped_column(String, default="")
@@ -99,6 +101,12 @@ class Order(Base):
     failure_remedy: Mapped[str] = mapped_column(String, default="")
     mandate_id: Mapped[str | None] = mapped_column(ForeignKey("mandates.id"), nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    # Only ever set for source="ai_buyer" - the natural-language ask that led
+    # to this order, so the AI Buyer Simulator's run history can show it
+    # without a customer identity to key off of (that flow is intentionally
+    # unauthenticated - see agents/ai_buyer.py).
+    buyer_intent: Mapped[str] = mapped_column(String, default="")
+    requested_budget_paise: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
 
 
 class Invoice(Base):
@@ -129,11 +137,11 @@ class Campaign(Base):
     name: Mapped[str] = mapped_column(String)
     goal: Mapped[str] = mapped_column(String, default="")
     discount_percent: Mapped[int] = mapped_column(Integer, default=0)
-    target_segment: Mapped[str] = mapped_column(String, default="general")
+    target_segment: Mapped[str] = mapped_column(String, default="repeat")
     product_sku: Mapped[str] = mapped_column(String, default="")
     budget_paise: Mapped[int] = mapped_column(Integer, default=0)
     max_recipients: Mapped[int] = mapped_column(Integer, default=0)
-    status: Mapped[str] = mapped_column(String, default="proposed")  # proposed|approved|denied|running|completed
+    status: Mapped[str] = mapped_column(String, default="proposed")  # proposed|denied|completed|cancelled
     message_copy: Mapped[str] = mapped_column(String, default="")
     reasoning: Mapped[str] = mapped_column(String, default="")
     spent_paise: Mapped[int] = mapped_column(Integer, default=0)

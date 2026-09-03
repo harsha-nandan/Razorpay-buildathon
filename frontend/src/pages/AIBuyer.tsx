@@ -1,7 +1,13 @@
-import { useMemo, useState } from "react";
-import { api, formatInr, type TraceItem } from "../api";
+import { useEffect, useMemo, useState } from "react";
+import { api, formatInr, type AIBuyerConfirmation, type AIBuyerRun, type TraceItem } from "../api";
 import TraceView from "../components/TraceView";
 import { findLatestCheckoutResult, stripMarkdown } from "../utils";
+
+function historyStatusBadge(status: string) {
+  if (status === "paid") return <span className="badge badge-good">paid</span>;
+  if (status === "denied") return <span className="badge badge-critical">denied</span>;
+  return <span className="badge badge-muted">{status}</span>;
+}
 
 const EXAMPLE_INTENTS = [
   { intent: "Buy a good pair of wireless earbuds", budget: 3000 },
@@ -13,11 +19,23 @@ export default function AIBuyer() {
   const [intent, setIntent] = useState("");
   const [budget, setBudget] = useState<string>("3000");
   const [loading, setLoading] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [reply, setReply] = useState("");
   const [trace, setTrace] = useState<TraceItem[]>([]);
   const [ran, setRan] = useState(false);
+  const [confirmation, setConfirmation] = useState<AIBuyerConfirmation | null>(null);
+  const [confirmError, setConfirmError] = useState("");
+  const [history, setHistory] = useState<AIBuyerRun[]>([]);
 
   const checkoutResult = useMemo(() => findLatestCheckoutResult(trace), [trace]);
+
+  function refreshHistory() {
+    api.aiBuyerHistory().then(setHistory).catch(() => {});
+  }
+
+  useEffect(() => {
+    refreshHistory();
+  }, []);
 
   async function run(intentValue: string, budgetValue: string) {
     if (!intentValue.trim() || loading) return;
@@ -25,11 +43,31 @@ export default function AIBuyer() {
     setRan(true);
     setReply("");
     setTrace([]);
+    setConfirmation(null);
+    setConfirmError("");
     try {
       const budgetPaise = budgetValue ? Math.round(parseFloat(budgetValue) * 100) : null;
       const res = await api.aiBuyerPurchase(intentValue, budgetPaise);
       setReply(stripMarkdown(res.reply));
       setTrace(res.trace);
+
+      // No human in the loop means no human clicking the payment link either -
+      // an approved quote is phase 1 of the x402 handshake; complete phase 2
+      // automatically so "Run AI purchase" demonstrates the full autonomous
+      // purchase, not just a quote the demo then leaves dangling.
+      const result = findLatestCheckoutResult(res.trace);
+      if (result?.status === "approved" && result.order_id) {
+        setConfirming(true);
+        try {
+          const conf = await api.aiBuyerConfirmPayment(intentValue, result.order_id);
+          setConfirmation(conf);
+        } catch (e) {
+          setConfirmError(String(e));
+        } finally {
+          setConfirming(false);
+        }
+      }
+      refreshHistory();
     } catch (e) {
       setReply(`⚠️ ${String(e)}`);
     } finally {
@@ -101,6 +139,23 @@ export default function AIBuyer() {
                         Payment link
                       </a>
                     </p>
+                    {confirming && <p style={{ fontSize: 12.5, marginTop: 8 }}>Confirming payment (phase 2 of the handshake)…</p>}
+                    {confirmation && (
+                      <p style={{ fontSize: 13, marginTop: 8 }}>
+                        <span className="badge badge-good">Payment confirmed</span>{" "}
+                        {confirmation.invoice_number ? (
+                          <>Invoice <code>{confirmation.invoice_number}</code> issued.</>
+                        ) : (
+                          "Order paid."
+                        )}{" "}
+                        No human clicked anything - this app auto-completed the x402 handshake's second call.
+                      </p>
+                    )}
+                    {confirmError && (
+                      <p style={{ fontSize: 12.5, marginTop: 8, color: "var(--status-critical)" }}>
+                        Auto-confirmation failed: {confirmError}
+                      </p>
+                    )}
                   </>
                 ) : (
                   <>
@@ -117,6 +172,42 @@ export default function AIBuyer() {
           </div>
         </div>
       )}
+
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="section-title">Run history</div>
+        <p style={{ fontSize: 11.5, color: "var(--text-muted)", marginBottom: 8 }}>
+          Every past run that reached a checkout decision - these orders are never attached to a customer
+          account (the AI buyer is intentionally unauthenticated), so this page is their only record.
+        </p>
+        {history.length === 0 ? (
+          <div className="empty-state">No runs yet.</div>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Intent</th>
+                <th>Budget</th>
+                <th>Items</th>
+                <th>Amount</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.map((run) => (
+                <tr key={run.order_id}>
+                  <td>{new Date(run.created_at).toLocaleString()}</td>
+                  <td style={{ maxWidth: 260 }}>{run.buyer_intent || "—"}</td>
+                  <td>{run.requested_budget_paise != null ? formatInr(run.requested_budget_paise) : "no limit"}</td>
+                  <td>{run.items.map((i) => i.title).join(", ")}</td>
+                  <td>{formatInr(run.amount_paise)}</td>
+                  <td>{historyStatusBadge(run.status)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }

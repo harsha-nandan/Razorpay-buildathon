@@ -32,9 +32,6 @@ def check_hard_bounds(action: ProposedAction) -> RuleVerdict:
     settings = get_settings()
     refs: list[str] = []
 
-    if action.amount_paise <= 0:
-        return RuleVerdict(False, "Amount must be positive.", ["amount>0"])
-
     if action.currency != "INR":
         return RuleVerdict(False, f"Unsupported currency '{action.currency}'.", ["currency=INR"])
 
@@ -111,6 +108,9 @@ def check_hard_bounds(action: ProposedAction) -> RuleVerdict:
                 f"remains of today's {_inr(settings.daily_campaign_budget_paise)} budget.",
                 refs,
             )
+
+    if action.amount_paise <= 0:
+        return RuleVerdict(False, "Amount must be positive.", refs + ["amount>0"])
 
     return RuleVerdict(True, "Within all configured hard bounds.", refs)
 
