@@ -33,7 +33,7 @@ def _product_payload(p: Product) -> dict:
 @router.get("/catalog")
 def list_catalog(db: Session = Depends(get_db)):
     products = db.query(Product).all()
-    return {"merchant": "Pulse & Co. Electronics Accessories", "currency": "INR", "products": [_product_payload(p) for p in products]}
+    return {"merchant": "FlowState Electronics Accessories", "currency": "INR", "products": [_product_payload(p) for p in products]}
 
 
 @router.get("/catalog/{sku}")
@@ -54,7 +54,7 @@ def agentic_commerce_manifest():
     settings = get_settings()
     return {
         "merchant": {
-            "name": "Pulse & Co. Electronics Accessories",
+            "name": "FlowState Electronics Accessories",
             "currency": "INR",
             "environment": "razorpay_test_mode" if settings.razorpay_mode == "mock" else "razorpay_test_mode_live_api",
         },

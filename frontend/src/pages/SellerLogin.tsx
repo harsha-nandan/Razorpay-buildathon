@@ -34,7 +34,7 @@ export default function SellerLogin() {
     <div className="auth-page">
       <div className="auth-card">
         <div className="landing-brand" style={{ marginBottom: 4 }}>
-          Pulse &amp; Co.
+          FlowState
         </div>
         <h1>{mode === "login" ? "Seller sign in" : "Create a seller account"}</h1>
         <form onSubmit={submit}>
@@ -75,7 +75,7 @@ export default function SellerLogin() {
           )}
         </p>
         <p className="auth-demo-hint">
-          Demo login: <code>merchant@pulseandco.test</code> / <code>merchant123</code>
+          Demo login: <code>merchant@flowstate.test</code> / <code>merchant123</code>
         </p>
         <Link className="link-btn" to="/login/customer">
           I'm shopping, take me to customer sign in →

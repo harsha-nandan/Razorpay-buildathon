@@ -5,7 +5,7 @@ export default function InvoiceView({ invoice, onClose }: { invoice: Invoice; on
     <div className="invoice">
       <div className="invoice-header">
         <div>
-          <div className="invoice-brand">Pulse &amp; Co.</div>
+          <div className="invoice-brand">FlowState</div>
           <div className="invoice-meta">Electronics Accessories &middot; Razorpay test-mode</div>
         </div>
         <div className="invoice-number">

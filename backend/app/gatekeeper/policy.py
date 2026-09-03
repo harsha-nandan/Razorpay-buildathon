@@ -40,8 +40,10 @@ def check_hard_bounds(action: ProposedAction) -> RuleVerdict:
         if action.amount_paise > settings.max_single_order_paise:
             return RuleVerdict(
                 False,
-                f"Order amount {_inr(action.amount_paise)} exceeds the per-order cap of "
-                f"{_inr(settings.max_single_order_paise)}.",
+                f"This order comes to {_inr(action.amount_paise)}, which is over our "
+                f"{_inr(settings.max_single_order_paise)} per-order limit. Every purchase here is capped and "
+                f"reviewed for safety, whether it's a person or an AI agent buying. Want me to remove an item "
+                f"to bring it under the limit?",
                 refs,
             )
 

@@ -6,6 +6,7 @@ export default function Layout() {
   const navigate = useNavigate();
 
   const links = [
+    { to: "/architecture", label: "Architecture" },
     seller ? { to: "/dashboard", label: "Dashboard" } : null,
     customer ? { to: "/chat", label: "Checkout Chat" } : null,
     customer ? { to: "/my-orders", label: "My Orders" } : null,
@@ -19,7 +20,7 @@ export default function Layout() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand" onClick={() => navigate("/")} style={{ cursor: "pointer" }}>
-          Pulse &amp; Co.
+          FlowState
           <small>Agentic commerce on Razorpay</small>
         </div>
         {links.map((link) => (

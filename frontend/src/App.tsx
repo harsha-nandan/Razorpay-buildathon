@@ -11,6 +11,7 @@ import Campaigns from "./pages/Campaigns";
 import Audit from "./pages/Audit";
 import Orders from "./pages/Orders";
 import MyOrders from "./pages/MyOrders";
+import Architecture from "./pages/Architecture";
 
 export default function App() {
   return (
@@ -36,6 +37,7 @@ export default function App() {
           }
         />
         <Route path="ai-buyer" element={<AIBuyer />} />
+        <Route path="architecture" element={<Architecture />} />
         <Route
           path="my-orders"
           element={

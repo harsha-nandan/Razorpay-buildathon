@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, formatInr, type AIBuyerConfirmation, type AIBuyerRun, type TraceItem } from "../api";
 import TraceView from "../components/TraceView";
+import AutoPaymentPanel from "../components/AutoPaymentPanel";
 import { findLatestCheckoutResult, stripMarkdown } from "../utils";
+
+/** Purely a display beat (see AutoPaymentPanel) - not a real processing
+ * delay. The actual confirm call below fires immediately and doesn't wait
+ * on this; it just keeps the "processing" panel on screen long enough for
+ * a viewer to register it before it flips to "authorized". */
+const PAYMENT_PANEL_MIN_VISIBLE_MS = 1100;
 
 function historyStatusBadge(status: string) {
   if (status === "paid") return <span className="badge badge-good">paid</span>;
@@ -59,7 +66,10 @@ export default function AIBuyer() {
       if (result?.status === "approved" && result.order_id) {
         setConfirming(true);
         try {
-          const conf = await api.aiBuyerConfirmPayment(intentValue, result.order_id);
+          const [conf] = await Promise.all([
+            api.aiBuyerConfirmPayment(intentValue, result.order_id),
+            new Promise((resolve) => setTimeout(resolve, PAYMENT_PANEL_MIN_VISIBLE_MS)),
+          ]);
           setConfirmation(conf);
         } catch (e) {
           setConfirmError(String(e));
@@ -139,16 +149,17 @@ export default function AIBuyer() {
                         Payment link
                       </a>
                     </p>
-                    {confirming && <p style={{ fontSize: 12.5, marginTop: 8 }}>Confirming payment (phase 2 of the handshake)…</p>}
+                    {(confirming || confirmation) && (
+                      <AutoPaymentPanel amountPaise={checkoutResult.amount_paise || 0} authorized={!!confirmation} />
+                    )}
                     {confirmation && (
-                      <p style={{ fontSize: 13, marginTop: 8 }}>
-                        <span className="badge badge-good">Payment confirmed</span>{" "}
+                      <p style={{ fontSize: 13, marginTop: 10 }}>
+                        <span className="badge badge-good">Payment authorized</span>{" "}
                         {confirmation.invoice_number ? (
                           <>Invoice <code>{confirmation.invoice_number}</code> issued.</>
                         ) : (
                           "Order paid."
-                        )}{" "}
-                        No human clicked anything - this app auto-completed the x402 handshake's second call.
+                        )}
                       </p>
                     )}
                     {confirmError && (

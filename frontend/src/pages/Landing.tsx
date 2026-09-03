@@ -6,7 +6,7 @@ export default function Landing() {
 
   return (
     <div className="landing">
-      <div className="landing-brand">Pulse &amp; Co.</div>
+      <div className="landing-brand">FlowState</div>
       <p className="landing-sub">Agentic commerce on Razorpay test-mode - built with Strands agents.</p>
       <div className="landing-cards">
         <Link to={customer ? "/chat" : "/login/customer"} className="landing-card">
@@ -24,6 +24,9 @@ export default function Landing() {
       </div>
       <Link to="/ai-buyer" className="link-btn" style={{ marginTop: 28 }}>
         Or try the AI-buyer simulator (no login needed) →
+      </Link>
+      <Link to="/architecture" className="link-btn" style={{ marginTop: 10 }}>
+        See how it's built →
       </Link>
     </div>
   );

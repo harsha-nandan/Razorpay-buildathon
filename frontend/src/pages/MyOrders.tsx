@@ -36,7 +36,7 @@ export default function MyOrders() {
     <div>
       <div className="page-header">
         <h1>My orders</h1>
-        <p>Everything you've bought from Pulse &amp; Co., with invoices for anything paid and a clear reason for anything that didn't go through.</p>
+        <p>Everything you've bought from FlowState, with invoices for anything paid and a clear reason for anything that didn't go through.</p>
       </div>
 
       <div className="grid-2">

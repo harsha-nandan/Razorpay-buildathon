@@ -185,7 +185,7 @@ export default function Chat() {
     <div className="chat-shell">
       <div className="chat-topbar">
         <div>
-          <strong>Pulse &amp; Co. shopping assistant</strong>
+          <strong>FlowState shopping assistant</strong>
         </div>
         <div style={{ display: "flex", gap: 8, position: "relative" }}>
           <button className="btn" type="button" disabled={resetting} onClick={cancelAndStartOver}>

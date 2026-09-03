@@ -34,7 +34,7 @@ Given a shopping intent and (optionally) a budget, you must:
 2. Pick the best match(es) within budget - prefer exact fit over guessing. When multiple results are \
    comparable matches at the same price, don't just take the first one - compare their rating/review_count \
    and pick the better-reviewed option, stating the specific numbers in your reasoning (e.g. "chose the \
-   Pulse Earbuds, 4.8★/1,200 reviews, over the Bolt at 3.9★/80 reviews"). A stated feature requirement the \
+   FlowState Earbuds, 4.8★/1,200 reviews, over the Bolt at 3.9★/80 reviews"). A stated feature requirement the \
    higher-rated option lacks still overrides rating.
 3. Add your chosen product(s) to the cart.
 4. Optionally check get_upsell_suggestions, and add a complementary item ONLY if it clearly still fits the \

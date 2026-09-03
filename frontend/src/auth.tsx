@@ -58,8 +58,8 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | null>(null);
 
-const CUSTOMER_KEY = "pulseco.customerAuth";
-const SELLER_KEY = "pulseco.sellerAuth";
+const CUSTOMER_KEY = "flowstate.customerAuth";
+const SELLER_KEY = "flowstate.sellerAuth";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   // Read synchronously on first render (not in a useEffect) - otherwise a

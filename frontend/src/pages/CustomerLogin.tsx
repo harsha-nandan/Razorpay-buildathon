@@ -34,7 +34,7 @@ export default function CustomerLogin() {
     <div className="auth-page">
       <div className="auth-card">
         <div className="landing-brand" style={{ marginBottom: 4 }}>
-          Pulse &amp; Co.
+          FlowState
         </div>
         <h1>{mode === "login" ? "Customer sign in" : "Create a customer account"}</h1>
         <form onSubmit={submit}>

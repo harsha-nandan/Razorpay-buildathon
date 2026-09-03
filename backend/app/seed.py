@@ -45,7 +45,7 @@ def _warn_missing_product_images() -> None:
 PRODUCTS = [
     dict(
         sku="EARBUDS-01",
-        title="Pulse Wireless Earbuds",
+        title="FlowState Wireless Earbuds",
         description="Active-noise-cancelling true wireless earbuds, 30h battery with case.",
         category="audio",
         price_paise=249900,
@@ -72,7 +72,7 @@ PRODUCTS = [
     ),
     dict(
         sku="CASE-EARBUDS-01",
-        title="Silicone Case for Pulse Earbuds",
+        title="Silicone Case for FlowState Earbuds",
         description="Shock-absorbing silicone case with carabiner clip.",
         category="accessories",
         price_paise=39900,
@@ -164,7 +164,7 @@ PRODUCTS = [
     # --- wearables ---
     dict(
         sku="BAND-01",
-        title="Pulse Fitness Band",
+        title="FlowState Fitness Band",
         description="Lightweight fitness band, step/sleep tracking, 10-day battery.",
         category="wearables",
         price_paise=159900,
@@ -288,7 +288,7 @@ CUSTOMERS = [
 
 
 DEMO_CUSTOMER_PASSWORD = "customer123"
-DEMO_SELLER_EMAIL = "merchant@pulseandco.test"
+DEMO_SELLER_EMAIL = "merchant@flowstate.test"
 DEMO_SELLER_PASSWORD = "merchant123"
 
 
@@ -305,7 +305,7 @@ def seed(db: Session) -> None:
     if db.query(Seller).count() == 0:
         db.add(
             Seller(
-                name="Pulse & Co. Admin",
+                name="FlowState Admin",
                 email=DEMO_SELLER_EMAIL,
                 password_hash=auth.hash_password(DEMO_SELLER_PASSWORD),
             )
