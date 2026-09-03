@@ -56,34 +56,50 @@ def get_model() -> Model:
         )
 
     if provider == "groq":
-        if not settings.groq_api_key:
+        groq_keys = settings.groq_api_keys
+        if not groq_keys:
             raise LLMNotConfiguredError(
-                "LLM_PROVIDER=groq but GROQ_API_KEY is not set. Get a free key at "
+                "LLM_PROVIDER=groq but no GROQ_API_KEY is set. Get a free key at "
                 "https://console.groq.com/keys and add it to backend/.env."
             )
         from strands.models.openai import OpenAIModel
 
+        from .fallback_model import FallbackModel
+
         # Groq's API is OpenAI-compatible, so the OpenAI provider works
         # unmodified against Groq's endpoint - no separate client needed.
-        groq_model = OpenAIModel(
-            client_args={"api_key": settings.groq_api_key, "base_url": settings.groq_base_url},
-            model_id=settings.groq_model_id,
-        )
+        groq_models = [
+            OpenAIModel(client_args={"api_key": key, "base_url": settings.groq_base_url}, model_id=settings.groq_model_id)
+            for key in groq_keys
+        ]
 
-        # Groq's free tier shares one daily token cap across everything this
-        # app does - it runs out. Rather than the whole app going dark until
-        # someone notices and flips LLM_PROVIDER by hand, fail over to
-        # Anthropic automatically on a rate limit, if a key is available.
+        # Each Groq key has its own daily token cap that runs out on its
+        # own. Chain the configured keys together with FallbackModel so a
+        # throttle on key N rotates to key N+1 - identified only by index in
+        # logs, never by value - before anything falls through to Anthropic.
+        # Built right-to-left so the last key's fallback is Anthropic (or
+        # nothing) and each earlier key's fallback is that chain.
+        model: Model = groq_models[-1]
+        for key_index in range(len(groq_models) - 1, 0, -1):
+            model = FallbackModel(
+                groq_models[key_index - 1],
+                model,
+                primary_name=f"groq-key-{key_index}",
+                fallback_name=f"groq-key-{key_index + 1}",
+            )
+
+        # Groq's free tier runs out - rather than the whole app going dark
+        # until someone notices and flips LLM_PROVIDER by hand, fail over to
+        # Anthropic automatically once every Groq key is throttled, if a key
+        # is available.
         if settings.anthropic_api_key:
-            from .fallback_model import FallbackModel
-
-            return FallbackModel(
-                groq_model,
+            model = FallbackModel(
+                model,
                 _build_anthropic_model(settings),
-                primary_name="groq",
+                primary_name=f"groq (keys 1-{len(groq_models)})",
                 fallback_name="anthropic",
             )
-        return groq_model
+        return model
 
     if provider == "gemini":
         if not settings.gemini_api_key:
@@ -130,7 +146,7 @@ def is_llm_configured() -> bool:
     if provider == "anthropic":
         return bool(settings.anthropic_api_key)
     if provider == "groq":
-        return bool(settings.groq_api_key)
+        return bool(settings.groq_api_keys)
     if provider == "gemini":
         return bool(settings.gemini_api_key)
     if provider == "ollama":

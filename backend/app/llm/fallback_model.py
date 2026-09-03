@@ -49,6 +49,18 @@ class FallbackModel(Model):
     response, a later throttle is NOT papered over - the two providers'
     partial outputs can't be safely spliced together, so it's raised as-is
     rather than risking a corrupted/duplicated reply.
+
+    Sticky: once `primary` has been observed throttled, this instance stops
+    trying it at all and goes straight to `fallback` on every later call -
+    no more per-request retry-then-fail against a key that's still going to
+    be dead a second later. `get_model()` is process-cached, so the same
+    instances (and this in-memory flag) persist across requests for the
+    life of the process; a restart clears it back to trying primary first,
+    which is fine - it's a routing optimization, not a correctness one.
+    Chaining several of these (key1 -> key2 -> key3 -> ... -> anthropic)
+    means a request lands directly on the last-known-good link with zero
+    wasted calls to links already known dead, since each node independently
+    remembers its own primary's state.
     """
 
     def __init__(self, primary: Model, fallback: Model, primary_name: str = "primary", fallback_name: str = "fallback"):
@@ -56,6 +68,7 @@ class FallbackModel(Model):
         self._fallback = fallback
         self._primary_name = primary_name
         self._fallback_name = fallback_name
+        self._primary_known_throttled = False
 
     def update_config(self, **model_config: Any) -> None:
         self._primary.update_config(**model_config)
@@ -76,27 +89,31 @@ class FallbackModel(Model):
         cancel_signal: Any = None,
         **kwargs: Any,
     ):
-        yielded_any = False
-        try:
-            async for event in self._primary.stream(
-                messages,
-                tool_specs,
-                system_prompt,
-                tool_choice=tool_choice,
-                system_prompt_content=system_prompt_content,
-                invocation_state=invocation_state,
-                cancel_signal=cancel_signal,
-                **kwargs,
-            ):
-                yielded_any = True
-                yield event
-            return
-        except ModelThrottledException:
-            if yielded_any:
-                raise
-            logger.warning(
-                "%s model throttled, falling back to %s", self._primary_name, self._fallback_name
-            )
+        if not self._primary_known_throttled:
+            yielded_any = False
+            try:
+                async for event in self._primary.stream(
+                    messages,
+                    tool_specs,
+                    system_prompt,
+                    tool_choice=tool_choice,
+                    system_prompt_content=system_prompt_content,
+                    invocation_state=invocation_state,
+                    cancel_signal=cancel_signal,
+                    **kwargs,
+                ):
+                    yielded_any = True
+                    yield event
+                return
+            except ModelThrottledException:
+                if yielded_any:
+                    raise
+                self._primary_known_throttled = True
+                logger.warning(
+                    "%s model throttled, falling back to %s", self._primary_name, self._fallback_name
+                )
+        else:
+            logger.debug("%s already known throttled, going straight to %s", self._primary_name, self._fallback_name)
 
         async for event in self._fallback.stream(
             _strip_reasoning_content(messages),
@@ -113,18 +130,22 @@ class FallbackModel(Model):
     async def structured_output(
         self, output_model: type[T], prompt: Messages, system_prompt: str | None = None, **kwargs: Any
     ):
-        yielded_any = False
-        try:
-            async for event in self._primary.structured_output(output_model, prompt, system_prompt, **kwargs):
-                yielded_any = True
-                yield event
-            return
-        except ModelThrottledException:
-            if yielded_any:
-                raise
-            logger.warning(
-                "%s model throttled, falling back to %s", self._primary_name, self._fallback_name
-            )
+        if not self._primary_known_throttled:
+            yielded_any = False
+            try:
+                async for event in self._primary.structured_output(output_model, prompt, system_prompt, **kwargs):
+                    yielded_any = True
+                    yield event
+                return
+            except ModelThrottledException:
+                if yielded_any:
+                    raise
+                self._primary_known_throttled = True
+                logger.warning(
+                    "%s model throttled, falling back to %s", self._primary_name, self._fallback_name
+                )
+        else:
+            logger.debug("%s already known throttled, going straight to %s", self._primary_name, self._fallback_name)
 
         async for event in self._fallback.structured_output(
             output_model, _strip_reasoning_content(prompt), system_prompt, **kwargs

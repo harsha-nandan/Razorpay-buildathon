@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from .config import get_settings
 from .db import SessionLocal, init_db
@@ -36,6 +38,15 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# Real product photos, named exactly by SKU (e.g. EARBUDS-01.jpg) - served
+# so product_images/<SKU>.jpg is reachable at /static/product_images/<SKU>.jpg.
+# Absolute path so this doesn't depend on uvicorn's cwd.
+app.mount(
+    "/static/product_images",
+    StaticFiles(directory=Path(__file__).resolve().parent.parent / "product_images"),
+    name="product_images",
 )
 
 app.include_router(auth.router)

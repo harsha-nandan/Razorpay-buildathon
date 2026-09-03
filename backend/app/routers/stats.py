@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from .. import auth
 from ..db import get_db
-from ..models import AuditLogEntry, Campaign, Order
+from ..models import AuditLogEntry, Campaign, Customer, Order
 
 router = APIRouter(prefix="/stats", tags=["stats"], dependencies=[Depends(auth.get_current_seller)])
 
@@ -27,6 +27,26 @@ def dashboard_stats(db: Session = Depends(get_db)):
     revenue_by_source: dict[str, int] = defaultdict(int)
     for o in paid_orders:
         revenue_by_source[o.source] += o.amount_paise
+
+    # Only orders with an identifiable customer count here - a logged-in
+    # shopper's session_id is always "cust-<customer.id>" (see routers/cart.py
+    # and routers/chat.py); the ai_buyer persona is deliberately anonymous
+    # (session_id "aibuyer-<uuid>", no customer login at all), so its orders
+    # have no one to attribute spend to and are excluded rather than grouped
+    # under a fake "unknown" row.
+    customers_by_id = {c.id: c for c in db.query(Customer).all()}
+    revenue_by_customer: dict[str, dict] = {}
+    for o in paid_orders:
+        if not o.session_id.startswith("cust-"):
+            continue
+        customer = customers_by_id.get(o.session_id.removeprefix("cust-"))
+        if not customer:
+            continue
+        entry = revenue_by_customer.setdefault(
+            customer.id, {"customer_name": customer.name, "revenue_paise": 0, "order_count": 0}
+        )
+        entry["revenue_paise"] += o.amount_paise
+        entry["order_count"] += 1
 
     gatekeeper_allows = len([a for a in audit_entries if a.decision == "allow"])
     gatekeeper_denies = len([a for a in audit_entries if a.decision == "deny"])
@@ -61,6 +81,7 @@ def dashboard_stats(db: Session = Depends(get_db)):
         "gatekeeper_denies": gatekeeper_denies,
         "revenue_by_day": sorted(({"date": d, "revenue_paise": v} for d, v in revenue_by_day.items()), key=lambda x: x["date"]),
         "revenue_by_source": [{"source": s, "revenue_paise": v} for s, v in revenue_by_source.items()],
+        "revenue_by_customer": sorted(revenue_by_customer.values(), key=lambda x: x["revenue_paise"], reverse=True),
         "funnel": {
             "stages": [
                 {"stage": "Checkout attempted", "count": attempted},

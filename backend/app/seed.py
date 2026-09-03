@@ -1,10 +1,17 @@
+import logging
 import random
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 
 from . import auth
+from .config import get_settings
 from .demo_history import seed_demo_history
 from .models import Customer, Product, Seller
+
+logger = logging.getLogger(__name__)
+
+PRODUCT_IMAGES_DIR = Path(__file__).resolve().parent.parent / "product_images"
 
 # Deliberately curated, not randomized - the earbuds-trio decision-quality
 # test case (same price, three ratings) needs stable, specific numbers to
@@ -20,12 +27,19 @@ def _random_rating() -> tuple[float, int]:
     return round(random.uniform(3.0, 5.0), 1), random.randint(20, 2000)
 
 
-def _image_url(keyword: str, lock: int) -> str:
-    """A free, no-API-key stock photo loosely matched to the product by
-    keyword. LoremFlickr serves a random Flickr photo per request unless
-    pinned with `lock`, which makes the same URL always resolve to the same
-    image - needed so a product's photo doesn't change on every reload."""
-    return f"https://loremflickr.com/400/400/{keyword}/all?lock={lock}"
+def _image_url(sku: str) -> str:
+    """Real product photo, served locally from product_images/<SKU>.jpg (see
+    main.py's static mount) - no external network/CDN dependency."""
+    return f"{get_settings().public_base_url}/static/product_images/{sku}.jpg"
+
+
+def _warn_missing_product_images() -> None:
+    missing = [p["sku"] for p in PRODUCTS if not (PRODUCT_IMAGES_DIR / f"{p['sku']}.jpg").exists()]
+    if missing:
+        logger.warning(
+            "No local product image for SKU(s): %s - add <SKU>.jpg to backend/product_images/",
+            ", ".join(missing),
+        )
 
 
 PRODUCTS = [
@@ -35,7 +49,6 @@ PRODUCTS = [
         description="Active-noise-cancelling true wireless earbuds, 30h battery with case.",
         category="audio",
         price_paise=249900,
-        image_url=_image_url("earbuds", 1),
         tags=["audio", "wireless", "bestseller"],
         complements=["CASE-EARBUDS-01", "POWERBANK-01"],
     ),
@@ -45,7 +58,6 @@ PRODUCTS = [
         description="Budget true wireless earbuds, no ANC, basic bass, 20h battery with case.",
         category="audio",
         price_paise=249900,
-        image_url=_image_url("earbuds", 2),
         tags=["audio", "wireless"],
         complements=["CASE-EARBUDS-01"],
     ),
@@ -55,7 +67,6 @@ PRODUCTS = [
         description="True wireless earbuds with a strong mic for calls, no ANC, 24h battery with case.",
         category="audio",
         price_paise=249900,
-        image_url=_image_url("earbuds", 3),
         tags=["audio", "wireless"],
         complements=["CASE-EARBUDS-01"],
     ),
@@ -65,7 +76,6 @@ PRODUCTS = [
         description="Shock-absorbing silicone case with carabiner clip.",
         category="accessories",
         price_paise=39900,
-        image_url=_image_url("phonecase", 4),
         tags=["accessory", "protection"],
         complements=[],
     ),
@@ -75,7 +85,6 @@ PRODUCTS = [
         description="360-degree sound, IPX7 waterproof, 12h battery.",
         category="audio",
         price_paise=349900,
-        image_url=_image_url("speaker", 5),
         tags=["audio", "outdoor"],
         complements=["POWERBANK-01"],
     ),
@@ -85,7 +94,6 @@ PRODUCTS = [
         description="AMOLED display, heart-rate and SpO2 tracking, 7-day battery.",
         category="wearables",
         price_paise=449900,
-        image_url=_image_url("smartwatch", 6),
         tags=["wearable", "fitness", "bestseller"],
         complements=["WATCHBAND-01", "POWERBANK-01"],
     ),
@@ -95,7 +103,6 @@ PRODUCTS = [
         description="Breathable nylon strap, fits Chrono Smartwatch.",
         category="accessories",
         price_paise=79900,
-        image_url=_image_url("watchband", 7),
         tags=["accessory"],
         complements=[],
     ),
@@ -105,7 +112,6 @@ PRODUCTS = [
         description="Slim 20W fast-charge power bank with USB-C.",
         category="power",
         price_paise=179900,
-        image_url=_image_url("powerbank", 8),
         tags=["power", "travel"],
         complements=[],
     ),
@@ -115,7 +121,6 @@ PRODUCTS = [
         description="Water-resistant sleeve with front accessory pocket.",
         category="bags",
         price_paise=129900,
-        image_url=_image_url("laptopsleeve", 9),
         tags=["bag", "work"],
         complements=["POWERBANK-01"],
     ),
@@ -125,7 +130,6 @@ PRODUCTS = [
         description="Hot-swappable mechanical keyboard, wireless + USB-C.",
         category="peripherals",
         price_paise=549900,
-        image_url=_image_url("keyboard", 10),
         tags=["peripheral", "work", "bestseller"],
         complements=["SLEEVE-01"],
     ),
@@ -136,7 +140,6 @@ PRODUCTS = [
         description="Reinforced nylon-braided USB-C to USB-C cable, 100W PD rated.",
         category="accessories",
         price_paise=59900,
-        image_url=_image_url("usbcable", 11),
         tags=["accessory", "charging"],
         complements=["POWERBANK-01"],
     ),
@@ -146,7 +149,6 @@ PRODUCTS = [
         description="Dashboard/vent magnetic mount, one-hand snap attach.",
         category="accessories",
         price_paise=89900,
-        image_url=_image_url("phonemount", 12),
         tags=["accessory", "car"],
         complements=[],
     ),
@@ -156,7 +158,6 @@ PRODUCTS = [
         description="9H hardness, anti-fingerprint coating, bubble-free install kit included.",
         category="accessories",
         price_paise=29900,
-        image_url=_image_url("smartphone", 13),
         tags=["accessory", "protection"],
         complements=[],
     ),
@@ -167,7 +168,6 @@ PRODUCTS = [
         description="Lightweight fitness band, step/sleep tracking, 10-day battery.",
         category="wearables",
         price_paise=159900,
-        image_url=_image_url("fitnessband", 14),
         tags=["wearable", "fitness"],
         complements=[],
     ),
@@ -177,7 +177,6 @@ PRODUCTS = [
         description="Titanium smart ring, sleep and recovery tracking, 6-day battery.",
         category="wearables",
         price_paise=699900,
-        image_url=_image_url("smartring", 15),
         tags=["wearable", "fitness"],
         complements=[],
     ),
@@ -187,7 +186,6 @@ PRODUCTS = [
         description="MIL-STD-810H rugged build, GPS, 14-day battery, built for outdoor use.",
         category="wearables",
         price_paise=549900,
-        image_url=_image_url("smartwatch", 16),
         tags=["wearable", "outdoor", "fitness"],
         complements=["WATCHBAND-01"],
     ),
@@ -198,7 +196,6 @@ PRODUCTS = [
         description="High-capacity 20000mAh power bank, dual USB-C PD 30W output.",
         category="power",
         price_paise=259900,
-        image_url=_image_url("powerbank", 17),
         tags=["power", "travel"],
         complements=["CABLE-01"],
     ),
@@ -208,7 +205,6 @@ PRODUCTS = [
         description="Compact GaN charger, 3-port (2x USB-C + USB-A), laptop-capable.",
         category="power",
         price_paise=169900,
-        image_url=_image_url("charger", 18),
         tags=["power", "charging"],
         complements=["CABLE-01"],
     ),
@@ -218,7 +214,6 @@ PRODUCTS = [
         description="Qi-certified 15W fast wireless charging pad, non-slip base.",
         category="power",
         price_paise=139900,
-        image_url=_image_url("wirelesscharger", 19),
         tags=["power", "charging"],
         complements=[],
     ),
@@ -229,7 +224,6 @@ PRODUCTS = [
         description="Water-resistant commuter backpack, padded 16-inch laptop sleeve, USB-C pass-through port.",
         category="bags",
         price_paise=349900,
-        image_url=_image_url("backpack", 20),
         tags=["bag", "work", "travel"],
         complements=["POWERBANK-01"],
     ),
@@ -239,7 +233,6 @@ PRODUCTS = [
         description="Compact pouch for cables, chargers, and small accessories, water-resistant lining.",
         category="bags",
         price_paise=79900,
-        image_url=_image_url("pouch", 21),
         tags=["bag", "travel"],
         complements=["CABLE-01"],
     ),
@@ -249,7 +242,6 @@ PRODUCTS = [
         description="Slim crossbody sling bag for phone, wallet, and earbuds, adjustable strap.",
         category="bags",
         price_paise=119900,
-        image_url=_image_url("crossbodybag", 22),
         tags=["bag", "everyday"],
         complements=[],
     ),
@@ -260,7 +252,6 @@ PRODUCTS = [
         description="Silent-click wireless mouse, 4000 DPI, USB-C rechargeable.",
         category="peripherals",
         price_paise=129900,
-        image_url=_image_url("computermouse", 23),
         tags=["peripheral", "work"],
         complements=["KEYBOARD-01"],
     ),
@@ -270,7 +261,6 @@ PRODUCTS = [
         description="Over-ear headset with active noise cancellation, boom mic, all-day comfort for calls.",
         category="peripherals",
         price_paise=449900,
-        image_url=_image_url("headphones", 24),
         tags=["peripheral", "work", "audio"],
         complements=[],
     ),
@@ -280,7 +270,6 @@ PRODUCTS = [
         description="7-in-1 USB-C dock: HDMI, dual USB-A, SD/microSD, 100W passthrough charging.",
         category="peripherals",
         price_paise=259900,
-        image_url=_image_url("usbhub", 25),
         tags=["peripheral", "work"],
         complements=["KEYBOARD-01", "MOUSE-01"],
     ),
@@ -304,10 +293,11 @@ DEMO_SELLER_PASSWORD = "merchant123"
 
 
 def seed(db: Session) -> None:
+    _warn_missing_product_images()
     if db.query(Product).count() == 0:
         for p in PRODUCTS:
             rating, review_count = CURATED_RATINGS.get(p["sku"]) or _random_rating()
-            db.add(Product(**p, rating=rating, review_count=review_count))
+            db.add(Product(**p, image_url=_image_url(p["sku"]), rating=rating, review_count=review_count))
     if db.query(Customer).count() == 0:
         password_hash = auth.hash_password(DEMO_CUSTOMER_PASSWORD)
         for c in CUSTOMERS:

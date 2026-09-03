@@ -3,7 +3,17 @@ import { api, formatInr, type AuditEntry, type DashboardStats } from "../api";
 import StatTile from "../components/StatTile";
 import RevenueChart from "../components/RevenueChart";
 import FunnelChart from "../components/FunnelChart";
+import PieStatChart from "../components/PieStatChart";
 import { useAuth } from "../auth";
+
+// Fixed per-channel color so a channel's slice is always the same color
+// regardless of the order the backend happens to return sources in.
+const CHANNEL_COLORS: Record<string, string> = {
+  checkout_agent: "var(--series-1)",
+  ai_buyer: "var(--series-2)",
+  campaign_agent: "var(--series-3)",
+};
+const FALLBACK_CHANNEL_COLOR = "var(--series-1)";
 
 function decisionBadge(entry: AuditEntry) {
   if (entry.decision === "allow") return <span className="badge badge-good">allowed</span>;
@@ -70,15 +80,61 @@ export default function Dashboard() {
               {stats.revenue_by_source.length === 0 ? (
                 <div className="empty-state">No paid orders yet.</div>
               ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                  {stats.revenue_by_source.map((s) => (
-                    <div key={s.source} className="cart-item">
-                      <span>{s.source}</span>
-                      <strong>{formatInr(s.revenue_paise)}</strong>
-                    </div>
-                  ))}
-                </div>
+                <>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {stats.revenue_by_source.map((s) => (
+                      <div key={s.source} className="cart-item">
+                        <span>{s.source}</span>
+                        <strong>{formatInr(s.revenue_paise)}</strong>
+                      </div>
+                    ))}
+                  </div>
+                  <PieStatChart
+                    data={stats.revenue_by_source.map((s) => ({ name: s.source, value: s.revenue_paise }))}
+                    colors={stats.revenue_by_source.map((s) => CHANNEL_COLORS[s.source] ?? FALLBACK_CHANNEL_COLOR)}
+                    valueFormatter={(v) => formatInr(v)}
+                  />
+                </>
               )}
+            </div>
+          </div>
+
+          <div className="grid-2" style={{ marginTop: 16 }}>
+            <div className="card">
+              <div className="section-title">Revenue by customer</div>
+              {stats.revenue_by_customer.length === 0 ? (
+                <div className="empty-state">No paid orders from a known customer yet.</div>
+              ) : (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Customer</th>
+                      <th>Total spent</th>
+                      <th>Orders</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stats.revenue_by_customer.map((c) => (
+                      <tr key={c.customer_name}>
+                        <td className="primary">{c.customer_name}</td>
+                        <td>{formatInr(c.revenue_paise)}</td>
+                        <td>{c.order_count}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            <div className="card">
+              <div className="section-title">Gatekeeper decisions</div>
+              <PieStatChart
+                data={[
+                  { name: "Allowed", value: stats.gatekeeper_allows },
+                  { name: "Denied", value: stats.gatekeeper_denies },
+                ]}
+                colors={["var(--status-good)", "var(--status-critical)"]}
+                emptyMessage="No gated decisions yet."
+              />
             </div>
           </div>
 

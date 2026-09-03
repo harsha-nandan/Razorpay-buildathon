@@ -20,7 +20,14 @@ class Settings(BaseSettings):
     # CPU/integrated-GPU inference (runs on Groq's own inference hardware).
     # OpenAI-API-compatible, so it reuses the OpenAI provider with a
     # different base_url instead of needing its own client.
+    # Each Groq key carries its own daily token cap, so a solo key runs dry
+    # fast. GROQ_API_KEY is key 1; GROQ_API_KEY_2/_3/_4 are optional extra
+    # keys rotated through (in order) before falling over to Anthropic - see
+    # llm/model_factory.py.
     groq_api_key: str | None = None
+    groq_api_key_2: str | None = None
+    groq_api_key_3: str | None = None
+    groq_api_key_4: str | None = None
     groq_model_id: str = "openai/gpt-oss-120b"
     groq_base_url: str = "https://api.groq.com/openai/v1"
     # Gemini: also has a genuinely free tier (Google AI Studio, no card
@@ -63,6 +70,18 @@ class Settings(BaseSettings):
     abandoned_order_ttl_minutes: int = 30
 
     cors_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
+
+    # Where the frontend (a separate origin, e.g. localhost:5173) reaches
+    # this backend - used to build absolute image URLs, since the frontend
+    # renders `image_url` directly as an <img src> with no prefixing.
+    public_base_url: str = "http://localhost:8000"
+
+    @property
+    def groq_api_keys(self) -> list[str]:
+        """Every configured Groq key, in rotation order. Empty/unset slots
+        are dropped rather than kept as holes, so key 2 still works if key 3
+        (or key 1) was never filled in."""
+        return [k for k in (self.groq_api_key, self.groq_api_key_2, self.groq_api_key_3, self.groq_api_key_4) if k]
 
 
 @lru_cache

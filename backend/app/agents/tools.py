@@ -232,6 +232,17 @@ def build_checkout_tools(
         subtotal_paise = cart_ops.cart_total_paise(items)
         amount_paise = round(subtotal_paise * (1 - discount_percent / 100))
 
+        # Attribute the resulting order to the campaign that earned it, not
+        # just whichever agent happened to place this call - a cart item is
+        # "campaign-priced" exactly when this customer is currently targeted
+        # by a still-live campaign for that SKU, the same check
+        # campaign_pricing.py's get_active_discount_percent uses to show the
+        # discounted price in the first place. Falls back to the calling
+        # agent (checkout_agent/ai_buyer) otherwise.
+        order_source = actor
+        if customer_id and any(get_active_discount_percent(db, customer_id, item["sku"]) > 0 for item in items):
+            order_source = "campaign_agent"
+
         # Abandoned payment links (never confirmed paid/failed) shouldn't
         # block new attempts forever - auto-cancel any that are stale before
         # counting toward the session cap.
@@ -263,7 +274,7 @@ def build_checkout_tools(
         if not verdict.allow:
             order = Order(
                 session_id=session_id,
-                source=actor,
+                source=order_source,
                 amount_paise=amount_paise,
                 status="denied",
                 items=items,
@@ -293,7 +304,7 @@ def build_checkout_tools(
         )
         order = Order(
             session_id=session_id,
-            source=actor,
+            source=order_source,
             razorpay_payment_link_id=link["id"],
             razorpay_payment_link_url=link["short_url"],
             amount_paise=amount_paise,

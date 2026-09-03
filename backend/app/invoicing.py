@@ -16,9 +16,20 @@ GST_RATE = 0.18
 
 
 def _next_invoice_number(db: Session) -> str:
+    # Derived from the highest existing number this year, not a row count -
+    # a count drifts out of sync (and starts colliding with real numbers)
+    # the moment any invoice is ever deleted, since deleting one leaves a
+    # gap that count+1 doesn't account for.
     year = datetime.now(timezone.utc).year
-    count = db.query(Invoice).count()
-    return f"INV-{year}-{count + 1:05d}"
+    prefix = f"INV-{year}-"
+    highest = (
+        db.query(Invoice.invoice_number)
+        .filter(Invoice.invoice_number.like(f"{prefix}%"))
+        .order_by(Invoice.invoice_number.desc())
+        .first()
+    )
+    next_seq = int(highest[0].removeprefix(prefix)) + 1 if highest else 1
+    return f"{prefix}{next_seq:05d}"
 
 
 def issue_invoice(db: Session, order: Order, customer_name: str = "", customer_email: str = "") -> Invoice:

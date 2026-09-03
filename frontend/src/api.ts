@@ -177,6 +177,7 @@ export interface DashboardStats {
   gatekeeper_denies: number;
   revenue_by_day: { date: string; revenue_paise: number }[];
   revenue_by_source: { source: string; revenue_paise: number }[];
+  revenue_by_customer: { customer_name: string; revenue_paise: number; order_count: number }[];
   funnel: {
     stages: { stage: string; count: number }[];
     by_source: { source: string; attempted: number; approved: number; paid: number }[];

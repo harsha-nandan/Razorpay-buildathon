@@ -179,9 +179,8 @@ def seed_demo_history(db: Session) -> None:
     _make_order(db, customer=priya, items=_order_items(products, ("KEYBOARD-01", 1)), status="paid", source="ai_buyer", when=_days_ago(4, 11))
     _make_order(db, customer=kabir, items=_order_items(products, ("KEYBOARD-01", 10)), status="denied", source="checkout_agent", when=_days_ago(4, 16))
 
-    # --- Day -3: campaign-driven purchase ---
+    # --- Day -3 ---
     _make_order(db, customer=priya, items=_order_items(products, ("CASE-EARBUDS-01", 1), ("EARBUDS-01", 1)), status="paid", source="checkout_agent", when=_days_ago(3, 10))
-    _make_order(db, customer=sara, items=_order_items(products, ("WATCH-01", 1)), status="paid", source="campaign_agent", when=_days_ago(3, 13))
 
     # --- Day -2: an abandoned failure (no retry), and a second AI-buyer denial ---
     _make_order(db, customer=devansh, items=_order_items(products, ("WATCH-01", 1)), status="failed", source="checkout_agent", when=_days_ago(2, 12), failure_code="card_declined_by_issuer")
