@@ -759,6 +759,22 @@ label {
   color: var(--text-secondary);
 }
 
+.auth-demo-hint-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.auth-demo-hint-segment {
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
 /* ---------- ChatGPT-style checkout chat ---------- */
 
 .chat-hero {

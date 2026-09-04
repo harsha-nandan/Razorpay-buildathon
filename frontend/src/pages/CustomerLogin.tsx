@@ -74,9 +74,27 @@ export default function CustomerLogin() {
             </>
           )}
         </p>
-        <p className="auth-demo-hint">
-          Demo login: <code>ananya.rao@example.com</code> / <code>customer123</code>
-        </p>
+        <div className="auth-demo-hint">
+          <div>
+            Demo logins, password <code>customer123</code> for all:
+          </div>
+          <div className="auth-demo-hint-row">
+            <span className="auth-demo-hint-segment">new</span>
+            <code>kabir.shah@example.com</code>
+          </div>
+          <div className="auth-demo-hint-row">
+            <span className="auth-demo-hint-segment">repeat</span>
+            <code>rohit.verma@example.com</code>
+          </div>
+          <div className="auth-demo-hint-row">
+            <span className="auth-demo-hint-segment">vip</span>
+            <code>ananya.rao@example.com</code>
+          </div>
+          <div className="auth-demo-hint-row">
+            <span className="auth-demo-hint-segment">lapsed</span>
+            <code>devansh.gupta@example.com</code>
+          </div>
+        </div>
         <Link className="link-btn" to="/login/seller">
           I'm the merchant, take me to seller sign in →
         </Link>

@@ -103,9 +103,25 @@ endpoints and vice versa (checked by role claim, not just signature validity). T
 the last one is the public, agent-facing surface an external AI buyer must be able to reach without a human
 login.
 
-**Demo credentials** (seeded on first run):
-- Customer: `ananya.rao@example.com` / `customer123` (or any other seeded customer, same password)
-- Seller: `merchant@flowstate.test` / `merchant123`
+**Demo credentials** (seeded on first run - all customer accounts share the same password):
+
+| Name | Email | Password | Segment |
+| --- | --- | --- | --- |
+| Kabir Shah | `kabir.shah@example.com` | `customer123` | new |
+| Priya Nair | `priya.nair@example.com` | `customer123` | new |
+| Rohit Verma | `rohit.verma@example.com` | `customer123` | repeat |
+| Meera Iyer | `meera.iyer@example.com` | `customer123` | repeat |
+| Ananya Rao | `ananya.rao@example.com` | `customer123` | vip |
+| Sara Khan | `sara.khan@example.com` | `customer123` | vip |
+| Devansh Gupta | `devansh.gupta@example.com` | `customer123` | lapsed |
+| Arjun Menon | `arjun.menon@example.com` | `customer123` | lapsed |
+
+Segment matters for campaigns - a campaign targets one segment (e.g. "vip"), so which customer you log in
+as determines whether you'll see that campaign's discount applied automatically in chat.
+
+| Role | Email | Password |
+| --- | --- | --- |
+| Seller | `merchant@flowstate.test` | `merchant123` |
 
 ## Architecture
 
