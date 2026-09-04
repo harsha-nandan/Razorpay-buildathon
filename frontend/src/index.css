@@ -991,6 +991,8 @@ label {
   line-height: 1.4;
 }
 
+/* ---------- AI buyer payment panel ---------- */
+
 .auto-payment-panel {
   margin-top: 12px;
   animation: auto-payment-appear 0.25s ease-out;
@@ -1155,7 +1157,7 @@ label {
   }
 }
 
-/* --- Architecture diagram --- */
+/* ---------- Architecture page (diagram + Track 1 requirements) ---------- */
 
 .arch-diagram {
   display: flex;
