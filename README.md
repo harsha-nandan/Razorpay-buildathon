@@ -219,7 +219,7 @@ npm run dev
 
 Open `http://localhost:5173`.
 
-## Known simplifications (hackathon scope)
+## Known simplifications
 
 - Chat conversation history is kept in-process (not persisted to disk) — it resets if the backend restarts.
 - "Payment succeeded/failed" in the UI is a demo simulate button (`POST /payments/simulate`) rather than a
