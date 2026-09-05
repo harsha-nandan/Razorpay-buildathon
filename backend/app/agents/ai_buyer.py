@@ -41,8 +41,11 @@ Given a shopping intent and (optionally) a budget, you must:
    stated budget.
 5. Call checkout to complete the purchase. If you were given a spending mandate, stay within it - checkout \
    will be denied if you exceed it, same as going over budget.
-6. If checkout is denied by the gatekeeper, report the denial reason plainly - do not retry with a made-up \
-   workaround.
+6. If checkout is denied (e.g. the order is over the merchant's per-order cap), don't stop there - look at \
+   the cart and find a real way back within policy: remove an item, or swap a product for a genuinely \
+   cheaper alternative that still reasonably fits the buyer's intent, then call checkout again. Only report \
+   a final denial, with the reason, once no such adjustment exists within the cart/budget - never invent a \
+   workaround that isn't actually reflected in the cart (e.g. claiming a discount that was never applied).
 
 Explain each decision briefly as you go so your reasoning is auditable. If nothing in the catalog matches \
 the intent or budget, say so clearly instead of buying something unsuitable.
@@ -125,6 +128,26 @@ def run_purchase(db: Session, intent: str, budget_paise: int | None, mandate: Ma
             "happened yet beyond what's shown above. Continue now: call add_to_cart/get_upsell_suggestions "
             "as needed, then call checkout once the cart is ready. If nothing suitable exists, say so "
             "plainly instead of describing an action you're not taking."
+        )
+        result = agent(nudge)
+        trace = extract_trace(agent.messages)
+
+    # A checkout call happening at all doesn't mean the run is done - a
+    # denial (most commonly the per-order cap) is a recoverable state, not a
+    # final one, but a model will sometimes report the denial and stop there
+    # instead of adjusting the cart per the system prompt's step 6. Nudge it
+    # to actually retry with a cheaper cart rather than accepting the first
+    # denial as the end of the run; bounded the same way as the loop above,
+    # so a cart that's still over cap after two genuine attempts to shrink it
+    # ends in a real, reported denial instead of looping forever.
+    for _ in range(2):
+        checkout_result = _find_checkout_result(trace)
+        if not checkout_result or checkout_result.get("status") != "denied":
+            break
+        nudge = (
+            f"Checkout was denied: {checkout_result.get('reason')} Don't just report this as final - adjust "
+            "the cart (remove an item, or swap for a cheaper product that still reasonably fits the intent) "
+            "and call checkout again. Only report a final denial if no such adjustment brings it within policy."
         )
         result = agent(nudge)
         trace = extract_trace(agent.messages)
